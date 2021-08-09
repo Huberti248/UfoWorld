@@ -574,8 +574,17 @@ void mainLoop()
         }
         for (int i = 0; i < cows.size(); ++i) {
             if (SDL_HasIntersectionF(&player.r, &cows[i].r)) {
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
-                cows.erase(cows.begin() + i--);
+                cows[i].r.y += -deltaTime;
+                if (cows[i].r.y <= 150) {
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
+                    cows.erase(cows.begin() + i--);
+                }
+            }
+            else {
+                cows[i].r.y += deltaTime;
+                if (cows[i].r.y + cows[i].r.h > windowHeight) {
+                    cows[i].r.y = windowHeight - cows[i].r.h;
+                }
             }
         }
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
@@ -680,7 +689,7 @@ int main(int argc, char* argv[])
     player.r.x = windowWidth / 2 - player.r.w / 2;
     player.r.y = 15;
     cows.push_back(generateCow(player));
-    scoreText.setText(renderer, robotoF, "10000", {});
+    scoreText.setText(renderer, robotoF, "0", {});
     scoreText.dstR.w = 20;
     scoreText.dstR.h = 35;
     scoreText.dstR.x = windowWidth / 2 - scoreText.dstR.w / 2;
