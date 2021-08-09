@@ -68,6 +68,8 @@ SDL_Renderer* renderer;
 TTF_Font* robotoF;
 bool running = true;
 
+#define COW_TRAVEL_DISTANCE 10
+
 void logOutputCallback(void* userdata, int category, SDL_LogPriority priority, const char* message)
 {
     std::cout << message << std::endl;
@@ -470,23 +472,27 @@ struct Entity {
     int dx = 0;
 };
 
+struct Cow {
+    SDL_FRect r{};
+};
+
 SDL_Texture* ufoT;
 SDL_Texture* cowT;
 Entity player;
 Clock globalClock;
-std::vector<SDL_FRect> cows;
+std::vector<Cow> cows;
 Clock cowClock;
 
-SDL_FRect generateCowR(Entity player)
+Cow generateCow(Entity player)
 {
-    SDL_FRect r;
+    Cow cow;
     do {
-        r.w = 32;
-        r.h = 32;
-        r.x = random(0, windowWidth - r.w);
-        r.y = windowHeight - r.h;
-    } while (SDL_HasIntersectionF(&r,&player.r));
-    return r;
+        cow.r.w = 32;
+        cow.r.h = 32;
+        cow.r.x = random(0, 1) ? -cow.r.w : windowWidth;
+        cow.r.y = windowHeight - cow.r.h;
+    } while (SDL_HasIntersectionF(&cow.r, &player.r));
+    return cow;
 }
 
 void mainLoop()
@@ -530,17 +536,25 @@ void mainLoop()
         player.dx = 1;
     }
     for (int i = 0; i < cows.size(); ++i) {
-        cows[i].x += -player.dx * deltaTime;
+        cows[i].r.x += -player.dx * deltaTime;
+        if (player.dx == 0) {
+            if (random(0, 1)) {
+                cows[i].r.x += deltaTime;
+            }
+            else {
+                cows[i].r.x += -deltaTime;
+            }
+        }
     }
     if (cowClock.getElapsedTime() > 3000) {
-        cows.push_back(generateCowR(player));
+        cows.push_back(generateCow(player));
         cowClock.restart();
     }
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
     SDL_RenderClear(renderer);
     SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
     for (int i = 0; i < cows.size(); ++i) {
-        SDL_RenderCopyF(renderer, cowT, 0, &cows[i]);
+        SDL_RenderCopyF(renderer, cowT, 0, &cows[i].r);
     }
     SDL_RenderPresent(renderer);
 }
@@ -566,7 +580,7 @@ int main(int argc, char* argv[])
     player.r.h = windowHeight;
     player.r.x = windowWidth / 2 - player.r.w / 2;
     player.r.y = 15;
-    cows.push_back(generateCowR(player));
+    cows.push_back(generateCow(player));
     globalClock.restart();
     cowClock.restart();
 #ifdef __EMSCRIPTEN__
