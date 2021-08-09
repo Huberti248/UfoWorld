@@ -482,6 +482,7 @@ Entity player;
 Clock globalClock;
 std::vector<Cow> cows;
 Clock cowClock;
+Text scoreText;
 
 Cow generateCow(Entity player)
 {
@@ -550,12 +551,19 @@ void mainLoop()
         cows.push_back(generateCow(player));
         cowClock.restart();
     }
+    for (int i = 0; i < cows.size(); ++i) {
+        if (SDL_HasIntersectionF(&player.r, &cows[i].r)) {
+            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
+            cows.erase(cows.begin() + i--);
+        }
+    }
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
     SDL_RenderClear(renderer);
     SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
     for (int i = 0; i < cows.size(); ++i) {
         SDL_RenderCopyF(renderer, cowT, 0, &cows[i].r);
     }
+    scoreText.draw(renderer);
     SDL_RenderPresent(renderer);
 }
 
@@ -581,6 +589,11 @@ int main(int argc, char* argv[])
     player.r.x = windowWidth / 2 - player.r.w / 2;
     player.r.y = 15;
     cows.push_back(generateCow(player));
+    scoreText.setText(renderer, robotoF, "0", {});
+    scoreText.dstR.w = 20;
+    scoreText.dstR.h = 40;
+    scoreText.dstR.x = windowWidth / 2 - scoreText.dstR.w / 2;
+    scoreText.dstR.y = 5;
     globalClock.restart();
     cowClock.restart();
 #ifdef __EMSCRIPTEN__
