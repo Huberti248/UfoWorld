@@ -476,13 +476,30 @@ struct Cow {
     SDL_FRect r{};
 };
 
+enum class State {
+    Gameplay,
+    Shop,
+};
+
 SDL_Texture* ufoT;
 SDL_Texture* cowT;
+SDL_Texture* heartT;
+SDL_Texture* shopT;
+SDL_Texture* speedT;
+SDL_Texture* buyT;
+SDL_Texture* backArrowT;
 Entity player;
 Clock globalClock;
 std::vector<Cow> cows;
 Clock cowClock;
 Text scoreText;
+std::vector<SDL_FRect> hearthRects;
+SDL_FRect shopR;
+State state = State::Gameplay;
+Text buyHeartPriceText;
+SDL_FRect buyHeartR;
+SDL_FRect buyHeartBtnR;
+SDL_FRect backArrowR;
 
 Cow generateCow(Entity player)
 {
@@ -499,72 +516,141 @@ Cow generateCow(Entity player)
 void mainLoop()
 {
     float deltaTime = globalClock.restart();
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-            running = false;
-            // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-        }
-        if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-            SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-        }
-        if (event.type == SDL_KEYDOWN) {
-            keys[event.key.keysym.scancode] = true;
-        }
-        if (event.type == SDL_KEYUP) {
-            keys[event.key.keysym.scancode] = false;
-        }
-        if (event.type == SDL_MOUSEBUTTONDOWN) {
-            buttons[event.button.button] = true;
-        }
-        if (event.type == SDL_MOUSEBUTTONUP) {
-            buttons[event.button.button] = false;
-        }
-        if (event.type == SDL_MOUSEMOTION) {
-            float scaleX, scaleY;
-            SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-            mousePos.x = event.motion.x / scaleX;
-            mousePos.y = event.motion.y / scaleY;
-            realMousePos.x = event.motion.x;
-            realMousePos.y = event.motion.y;
-        }
-    }
-    player.dx = 0;
-    if (keys[SDL_SCANCODE_A]) {
-        player.dx = -1;
-    }
-    else if (keys[SDL_SCANCODE_D]) {
-        player.dx = 1;
-    }
-    for (int i = 0; i < cows.size(); ++i) {
-        cows[i].r.x += -player.dx * deltaTime;
-        if (player.dx == 0) {
-            if (random(0, 1)) {
-                cows[i].r.x += deltaTime;
+    if (state == State::Gameplay) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
             }
-            else {
-                cows[i].r.x += -deltaTime;
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &shopR)) {
+                    state = State::Shop;
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
             }
         }
-    }
-    if (cowClock.getElapsedTime() > 3000) {
-        cows.push_back(generateCow(player));
-        cowClock.restart();
-    }
-    for (int i = 0; i < cows.size(); ++i) {
-        if (SDL_HasIntersectionF(&player.r, &cows[i].r)) {
-            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
-            cows.erase(cows.begin() + i--);
+        player.dx = 0;
+        if (keys[SDL_SCANCODE_A]) {
+            player.dx = -1;
         }
+        else if (keys[SDL_SCANCODE_D]) {
+            player.dx = 1;
+        }
+        for (int i = 0; i < cows.size(); ++i) {
+            cows[i].r.x += -player.dx * deltaTime;
+            if (player.dx == 0) {
+                if (random(0, 1)) {
+                    cows[i].r.x += deltaTime;
+                }
+                else {
+                    cows[i].r.x += -deltaTime;
+                }
+            }
+        }
+        if (cowClock.getElapsedTime() > 3000) {
+            cows.push_back(generateCow(player));
+            cowClock.restart();
+        }
+        for (int i = 0; i < cows.size(); ++i) {
+            if (SDL_HasIntersectionF(&player.r, &cows[i].r)) {
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
+                cows.erase(cows.begin() + i--);
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+        SDL_RenderClear(renderer);
+        SDL_RenderCopyF(renderer, shopT, 0, &shopR);
+        SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
+        for (int i = 0; i < cows.size(); ++i) {
+            SDL_RenderCopyF(renderer, cowT, 0, &cows[i].r);
+        }
+        scoreText.draw(renderer);
+        for (int i = 0; i < hearthRects.size(); ++i) {
+            SDL_RenderCopyF(renderer, heartT, 0, &hearthRects[i]);
+        }
+        SDL_RenderPresent(renderer);
     }
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
-    SDL_RenderClear(renderer);
-    SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
-    for (int i = 0; i < cows.size(); ++i) {
-        SDL_RenderCopyF(renderer, cowT, 0, &cows[i].r);
+    else if (state == State::Shop) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &backArrowR)) {
+                    state = State::Gameplay;
+                }
+                if (SDL_PointInFRect(&mousePos, &buyHeartBtnR) && hearthRects.size() < 5) {
+                    if (std::stoi(scoreText.text) >= std::stoi(buyHeartPriceText.text)) {
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(buyHeartPriceText.text), {});
+                        hearthRects.push_back(SDL_FRect());
+                        hearthRects.back() = hearthRects[hearthRects.size() - 2];
+                        hearthRects.back().x = hearthRects[hearthRects.size() - 2].x + hearthRects[hearthRects.size() - 2].w + 5;
+                        if (hearthRects.size() > 3) {
+                            if (hearthRects.size() == 4) {
+                                hearthRects.back().x = hearthRects.front().x;
+                            }
+                            hearthRects.back().y = hearthRects.front().x + hearthRects.front().h;
+                        }
+                        buyHeartPriceText.setText(renderer, robotoF, std::stoi(buyHeartPriceText.text) + 100, {});
+                    }
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+        SDL_RenderClear(renderer);
+        if (hearthRects.size() < 5) {
+            SDL_RenderCopyF(renderer, heartT, 0, &buyHeartR);
+            buyHeartPriceText.draw(renderer);
+            SDL_RenderCopyF(renderer, buyT, 0, &buyHeartBtnR);
+        }
+        SDL_RenderCopyF(renderer, backArrowT, 0, &backArrowR);
+        scoreText.draw(renderer);
+        SDL_RenderPresent(renderer);
     }
-    scoreText.draw(renderer);
-    SDL_RenderPresent(renderer);
 }
 
 int main(int argc, char* argv[])
@@ -584,16 +670,47 @@ int main(int argc, char* argv[])
     SDL_AddEventWatch(eventWatch, 0);
     cowT = IMG_LoadTexture(renderer, "res/cow.png");
     ufoT = IMG_LoadTexture(renderer, "res/ufo.png");
+    heartT = IMG_LoadTexture(renderer, "res/heart.png");
+    shopT = IMG_LoadTexture(renderer, "res/shop.png");
+    speedT = IMG_LoadTexture(renderer, "res/speed.png");
+    buyT = IMG_LoadTexture(renderer, "res/buy.png");
+    backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
     player.r.w = 100;
     player.r.h = windowHeight;
     player.r.x = windowWidth / 2 - player.r.w / 2;
     player.r.y = 15;
     cows.push_back(generateCow(player));
-    scoreText.setText(renderer, robotoF, "0", {});
+    scoreText.setText(renderer, robotoF, "10000", {});
     scoreText.dstR.w = 20;
-    scoreText.dstR.h = 40;
+    scoreText.dstR.h = 35;
     scoreText.dstR.x = windowWidth / 2 - scoreText.dstR.w / 2;
     scoreText.dstR.y = 5;
+    hearthRects.push_back(SDL_FRect());
+    hearthRects.back().w = 32;
+    hearthRects.back().h = 32;
+    hearthRects.back().x = 0;
+    hearthRects.back().y = 0;
+    shopR.w = 48;
+    shopR.h = 48;
+    shopR.x = windowWidth - shopR.w;
+    shopR.y = 0;
+    backArrowR.w = 32;
+    backArrowR.h = 32;
+    backArrowR.x = 0;
+    backArrowR.y = 0;
+    buyHeartR.w = 64;
+    buyHeartR.h = 64;
+    buyHeartR.x = 5;
+    buyHeartPriceText.setText(renderer, robotoF, "200", {});
+    buyHeartPriceText.dstR.w = 50;
+    buyHeartPriceText.dstR.h = 20;
+    buyHeartPriceText.dstR.x = buyHeartR.x + buyHeartR.w / 2 - buyHeartPriceText.dstR.w / 2;
+    buyHeartPriceText.dstR.y = backArrowR.y + backArrowR.h;
+    buyHeartR.y = buyHeartPriceText.dstR.y + buyHeartPriceText.dstR.h + 5;
+    buyHeartBtnR.w = buyHeartR.w;
+    buyHeartBtnR.h = 38;
+    buyHeartBtnR.x = buyHeartR.x;
+    buyHeartBtnR.y = buyHeartR.y + buyHeartR.h + 5;
     globalClock.restart();
     cowClock.restart();
 #ifdef __EMSCRIPTEN__
