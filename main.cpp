@@ -465,8 +465,33 @@ int eventWatch(void* userdata, SDL_Event* event)
     return 0;
 }
 
+struct Entity {
+    SDL_FRect r{};
+    int dx = 0;
+};
+
+SDL_Texture* ufoT;
+SDL_Texture* cowT;
+Entity player;
+Clock globalClock;
+std::vector<SDL_FRect> cows;
+Clock cowClock;
+
+SDL_FRect generateCowR(Entity player)
+{
+    SDL_FRect r;
+    do {
+        r.w = 32;
+        r.h = 32;
+        r.x = random(0, windowWidth - r.w);
+        r.y = windowHeight - r.h;
+    } while (SDL_HasIntersectionF(&r,&player.r));
+    return r;
+}
+
 void mainLoop()
 {
+    float deltaTime = globalClock.restart();
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -497,8 +522,26 @@ void mainLoop()
             realMousePos.y = event.motion.y;
         }
     }
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    player.dx = 0;
+    if (keys[SDL_SCANCODE_A]) {
+        player.dx = -1;
+    }
+    else if (keys[SDL_SCANCODE_D]) {
+        player.dx = 1;
+    }
+    for (int i = 0; i < cows.size(); ++i) {
+        cows[i].x += -player.dx * deltaTime;
+    }
+    if (cowClock.getElapsedTime() > 3000) {
+        cows.push_back(generateCowR(player));
+        cowClock.restart();
+    }
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
     SDL_RenderClear(renderer);
+    SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
+    for (int i = 0; i < cows.size(); ++i) {
+        SDL_RenderCopyF(renderer, cowT, 0, &cows[i]);
+    }
     SDL_RenderPresent(renderer);
 }
 
@@ -517,6 +560,15 @@ int main(int argc, char* argv[])
     SDL_GetWindowSize(window, &w, &h);
     SDL_RenderSetScale(renderer, w / (float)windowWidth, h / (float)windowHeight);
     SDL_AddEventWatch(eventWatch, 0);
+    cowT = IMG_LoadTexture(renderer, "res/cow.png");
+    ufoT = IMG_LoadTexture(renderer, "res/ufo.png");
+    player.r.w = 100;
+    player.r.h = windowHeight;
+    player.r.x = windowWidth / 2 - player.r.w / 2;
+    player.r.y = 15;
+    cows.push_back(generateCowR(player));
+    globalClock.restart();
+    cowClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else
