@@ -488,6 +488,7 @@ SDL_Texture* shopT;
 SDL_Texture* speedT;
 SDL_Texture* buyT;
 SDL_Texture* backArrowT;
+SDL_Texture* backgroundT;
 Entity player;
 Clock globalClock;
 std::vector<Cow> cows;
@@ -589,6 +590,7 @@ void mainLoop()
         }
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
         SDL_RenderClear(renderer);
+        SDL_RenderCopyF(renderer, backgroundT, 0, 0);
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
         SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
         for (int i = 0; i < cows.size(); ++i) {
@@ -684,6 +686,7 @@ int main(int argc, char* argv[])
     speedT = IMG_LoadTexture(renderer, "res/speed.png");
     buyT = IMG_LoadTexture(renderer, "res/buy.png");
     backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
+    backgroundT = IMG_LoadTexture(renderer, "res/background.png");
     player.r.w = 100;
     player.r.h = windowHeight;
     player.r.x = windowWidth / 2 - player.r.w / 2;
