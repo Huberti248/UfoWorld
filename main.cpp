@@ -476,6 +476,7 @@ struct Entity {
 
 struct Cow {
     SDL_FRect r{};
+    bool isLeft = false;
 };
 
 enum class State {
@@ -570,9 +571,11 @@ void mainLoop()
             if (player.dx == 0) {
                 if (random(0, 1)) {
                     cows[i].r.x += deltaTime * GAME_SPEED;
+                    cows[i].isLeft = false;
                 }
                 else {
                     cows[i].r.x += -deltaTime * GAME_SPEED;
+                    cows[i].isLeft = true;
                 }
             }
         }
@@ -621,7 +624,12 @@ void mainLoop()
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
         SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
         for (int i = 0; i < cows.size(); ++i) {
-            SDL_RenderCopyF(renderer, cowT, 0, &cows[i].r);
+            if (cows[i].isLeft) {
+                SDL_RenderCopyExF(renderer, cowT, 0, &cows[i].r, 0, 0, SDL_FLIP_HORIZONTAL);
+            }
+            else {
+                SDL_RenderCopyExF(renderer, cowT, 0, &cows[i].r, 0, 0, SDL_FLIP_NONE);
+            }
         }
         scoreText.draw(renderer);
         for (int i = 0; i < hearthRects.size(); ++i) {
