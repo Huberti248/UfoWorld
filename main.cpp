@@ -491,6 +491,11 @@ SDL_Texture* shopT;
 SDL_Texture* buyT;
 SDL_Texture* backArrowT;
 SDL_Texture* backgroundT;
+SDL_Texture* mutedT;
+SDL_Texture* unmutedT;
+Mix_Music* music;
+Mix_Chunk* pickupS;
+Mix_Chunk* powerupS;
 Entity player;
 Clock globalClock;
 std::vector<Cow> cows;
@@ -506,6 +511,8 @@ SDL_FRect backArrowR;
 SDL_FRect backgroundDstR;
 SDL_FRect backgroundDstR2;
 SDL_FRect backgroundDstR3;
+SDL_FRect soundBtnR;
+bool hasSounds = true;
 
 Cow generateCow(Entity player)
 {
@@ -517,6 +524,18 @@ Cow generateCow(Entity player)
         cow.r.y = windowHeight - cow.r.h;
     } while (SDL_HasIntersectionF(&cow.r, &player.r));
     return cow;
+}
+
+void muteMusicAndSounds()
+{
+    Mix_VolumeMusic(0);
+    Mix_Volume(-1, 0);
+}
+
+void unmuteMusicAndSounds()
+{
+    Mix_VolumeMusic(128);
+    Mix_Volume(-1, 128);
 }
 
 void mainLoop()
@@ -542,6 +561,15 @@ void mainLoop()
                 buttons[event.button.button] = true;
                 if (SDL_PointInFRect(&mousePos, &shopR)) {
                     state = State::Shop;
+                }
+                if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
+                    hasSounds = !hasSounds;
+                    if (hasSounds) {
+                        unmuteMusicAndSounds();
+                    }
+                    else {
+                        muteMusicAndSounds();
+                    }
                 }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
@@ -589,6 +617,7 @@ void mainLoop()
                 if (cows[i].r.y <= 150) {
                     scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
                     cows.erase(cows.begin() + i--);
+                    Mix_PlayChannel(-1, pickupS, 0);
                 }
             }
             else {
@@ -635,6 +664,12 @@ void mainLoop()
         for (int i = 0; i < hearthRects.size(); ++i) {
             SDL_RenderCopyF(renderer, heartT, 0, &hearthRects[i]);
         }
+        if (hasSounds) {
+            SDL_RenderCopyF(renderer, unmutedT, 0, &soundBtnR);
+        }
+        else {
+            SDL_RenderCopyF(renderer, mutedT, 0, &soundBtnR);
+        }
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -660,6 +695,7 @@ void mainLoop()
                 }
                 if (SDL_PointInFRect(&mousePos, &buyHeartBtnR) && hearthRects.size() < 5) {
                     if (std::stoi(scoreText.text) >= std::stoi(buyHeartPriceText.text)) {
+                        Mix_PlayChannel(-1, powerupS, 0);
                         scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(buyHeartPriceText.text), {});
                         hearthRects.push_back(SDL_FRect());
                         hearthRects.back() = hearthRects[hearthRects.size() - 2];
@@ -706,6 +742,7 @@ int main(int argc, char* argv[])
     SDL_LogSetOutputFunction(logOutputCallback, 0);
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
+    Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048);
     SDL_GetMouseState(&mousePos.x, &mousePos.y);
     window = SDL_CreateWindow("UfoWorld", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -721,6 +758,12 @@ int main(int argc, char* argv[])
     buyT = IMG_LoadTexture(renderer, "res/buy.png");
     backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
     backgroundT = IMG_LoadTexture(renderer, "res/background.png");
+    mutedT = IMG_LoadTexture(renderer, "res/muted.png");
+    unmutedT = IMG_LoadTexture(renderer, "res/unmuted.png");
+    music = Mix_LoadMUS("res/music.ogg");
+    pickupS = Mix_LoadWAV("res/pickup.wav");
+    powerupS = Mix_LoadWAV("res/powerup.wav");
+    Mix_PlayMusic(music, -1);
     player.r.w = 100;
     player.r.h = windowHeight;
     player.r.x = windowWidth / 2 - player.r.w / 2;
@@ -769,6 +812,10 @@ int main(int argc, char* argv[])
     backgroundDstR3.h = windowHeight;
     backgroundDstR3.x = windowWidth;
     backgroundDstR3.y = 0;
+    soundBtnR.w = 32;
+    soundBtnR.h = 32;
+    soundBtnR.x = windowWidth - soundBtnR.w;
+    soundBtnR.y = shopR.y + shopR.h;
     globalClock.restart();
     cowClock.restart();
 #ifdef __EMSCRIPTEN__
