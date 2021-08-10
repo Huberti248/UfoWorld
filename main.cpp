@@ -582,14 +582,14 @@ void mainLoop()
         }
         for (int i = 0; i < cows.size(); ++i) {
             if (SDL_HasIntersectionF(&player.r, &cows[i].r)) {
-                cows[i].r.y += -deltaTime;
+                cows[i].r.y += -deltaTime * GAME_SPEED;
                 if (cows[i].r.y <= 150) {
                     scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1, {});
                     cows.erase(cows.begin() + i--);
                 }
             }
             else {
-                cows[i].r.y += deltaTime;
+                cows[i].r.y += deltaTime * GAME_SPEED;
                 if (cows[i].r.y + cows[i].r.h > windowHeight) {
                     cows[i].r.y = windowHeight - cows[i].r.h;
                 }
