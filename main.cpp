@@ -57,6 +57,8 @@ using namespace std::chrono_literals;
 //360 x 640 (Galaxy S5)
 //640 x 480 (480i - Smallest PC monitor)
 
+#define GAME_SPEED 0.5
+
 int windowWidth = 240;
 int windowHeight = 320;
 SDL_Point mousePos;
@@ -485,7 +487,6 @@ SDL_Texture* ufoT;
 SDL_Texture* cowT;
 SDL_Texture* heartT;
 SDL_Texture* shopT;
-SDL_Texture* speedT;
 SDL_Texture* buyT;
 SDL_Texture* backArrowT;
 SDL_Texture* backgroundT;
@@ -501,6 +502,9 @@ Text buyHeartPriceText;
 SDL_FRect buyHeartR;
 SDL_FRect buyHeartBtnR;
 SDL_FRect backArrowR;
+SDL_FRect backgroundDstR;
+SDL_FRect backgroundDstR2;
+SDL_FRect backgroundDstR3;
 
 Cow generateCow(Entity player)
 {
@@ -558,14 +562,17 @@ void mainLoop()
         else if (keys[SDL_SCANCODE_D]) {
             player.dx = 1;
         }
+        backgroundDstR.x += -player.dx * deltaTime * GAME_SPEED;
+        backgroundDstR2.x += -player.dx * deltaTime * GAME_SPEED;
+        backgroundDstR3.x += -player.dx * deltaTime * GAME_SPEED;
         for (int i = 0; i < cows.size(); ++i) {
-            cows[i].r.x += -player.dx * deltaTime;
+            cows[i].r.x += -player.dx * deltaTime * GAME_SPEED;
             if (player.dx == 0) {
                 if (random(0, 1)) {
-                    cows[i].r.x += deltaTime;
+                    cows[i].r.x += deltaTime * GAME_SPEED;
                 }
                 else {
-                    cows[i].r.x += -deltaTime;
+                    cows[i].r.x += -deltaTime * GAME_SPEED;
                 }
             }
         }
@@ -590,7 +597,27 @@ void mainLoop()
         }
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
         SDL_RenderClear(renderer);
-        SDL_RenderCopyF(renderer, backgroundT, 0, 0);
+        SDL_RenderCopyF(renderer, backgroundT, 0, &backgroundDstR);
+        SDL_RenderCopyExF(renderer, backgroundT, 0, &backgroundDstR2, 0, 0, SDL_FLIP_HORIZONTAL);
+        SDL_RenderCopyExF(renderer, backgroundT, 0, &backgroundDstR3, 0, 0, SDL_FLIP_HORIZONTAL);
+        if (backgroundDstR.x + backgroundDstR.w < 0) {
+            backgroundDstR.x = backgroundDstR3.x + backgroundDstR3.w;
+        }
+        if (backgroundDstR.x > windowWidth) {
+            backgroundDstR.x = backgroundDstR2.x - backgroundDstR.w;
+        }
+        if (backgroundDstR3.x + backgroundDstR3.w < 0) {
+            backgroundDstR3.x = backgroundDstR.x + backgroundDstR.w;
+        }
+        if (backgroundDstR3.x > windowWidth) {
+            backgroundDstR3.x = backgroundDstR.x + backgroundDstR3.w;
+        }
+        if (backgroundDstR2.x > windowWidth) {
+            backgroundDstR2.x = backgroundDstR.x - backgroundDstR2.w;
+        }
+        if (backgroundDstR2.x + backgroundDstR2.w < 0) {
+            backgroundDstR2.x = backgroundDstR.x + backgroundDstR.w;
+        }
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
         SDL_RenderCopyF(renderer, ufoT, 0, &player.r);
         for (int i = 0; i < cows.size(); ++i) {
@@ -683,7 +710,6 @@ int main(int argc, char* argv[])
     ufoT = IMG_LoadTexture(renderer, "res/ufo.png");
     heartT = IMG_LoadTexture(renderer, "res/heart.png");
     shopT = IMG_LoadTexture(renderer, "res/shop.png");
-    speedT = IMG_LoadTexture(renderer, "res/speed.png");
     buyT = IMG_LoadTexture(renderer, "res/buy.png");
     backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
     backgroundT = IMG_LoadTexture(renderer, "res/background.png");
@@ -723,6 +749,18 @@ int main(int argc, char* argv[])
     buyHeartBtnR.h = 38;
     buyHeartBtnR.x = buyHeartR.x;
     buyHeartBtnR.y = buyHeartR.y + buyHeartR.h + 5;
+    backgroundDstR.w = windowWidth;
+    backgroundDstR.h = windowHeight;
+    backgroundDstR.x = 0;
+    backgroundDstR.y = 0;
+    backgroundDstR2.w = windowWidth;
+    backgroundDstR2.h = windowHeight;
+    backgroundDstR2.x = -windowWidth;
+    backgroundDstR2.y = 0;
+    backgroundDstR3.w = windowWidth;
+    backgroundDstR3.h = windowHeight;
+    backgroundDstR3.x = windowWidth;
+    backgroundDstR3.y = 0;
     globalClock.restart();
     cowClock.restart();
 #ifdef __EMSCRIPTEN__
