@@ -483,6 +483,7 @@ struct Collectable {
 enum class State {
     Gameplay,
     Shop,
+    Ufos,
 };
 
 SDL_Texture* ufoT;
@@ -498,6 +499,12 @@ SDL_Texture* alienT;
 SDL_Texture* ufoWithRedLaserT;
 SDL_Texture* redLaserT;
 SDL_Texture* moreCowsUpgradeT;
+SDL_Texture* manyUfosT;
+SDL_Texture* addT;
+SDL_Texture* leftArrowT;
+SDL_Texture* collectAllT;
+SDL_Texture* shieldT;
+SDL_Texture* bubbleT;
 Mix_Music* music;
 Mix_Chunk* pickupS;
 Mix_Chunk* powerupS;
@@ -509,6 +516,7 @@ std::vector<Collectable> enemies;
 Clock cowClock;
 Clock enemyClock;
 Clock heartClock;
+Clock cowsClock;
 Text scoreText;
 std::vector<SDL_FRect> hearthRects;
 SDL_FRect shopR;
@@ -522,6 +530,12 @@ SDL_FRect buyLaserBtnR;
 Text buyMoreCowsPriceText;
 SDL_FRect buyMoreCowsR;
 SDL_FRect buyMoreCowsBtnR;
+Text buyShieldPriceText;
+SDL_FRect buyShieldR;
+SDL_FRect buyShieldBtnR;
+Text buyUfosPriceText;
+SDL_FRect buyUfosR;
+SDL_FRect buyUfosBtnR;
 SDL_FRect backArrowR;
 SDL_FRect backgroundDstR;
 SDL_FRect backgroundDstR2;
@@ -534,6 +548,15 @@ bool laserBought = false;
 bool hasLaser = false;
 float cowSpawnDelay = DEFAULT_COW_SPAWN_DELAY;
 std::vector<Collectable> hearts;
+SDL_FRect ufosBtnR;
+Text scorePerSecondText;
+Text collectedScoreText;
+SDL_FRect addUfoBtnR;
+Text addUfoPriceText;
+SDL_FRect collectAllBtnR;
+Text ufosCountText;
+bool hasShield = false;
+bool boughtUfos = false;
 
 Collectable generateCollectable(Entity player)
 {
@@ -597,6 +620,11 @@ void readData(Text& scoreText, int& maxHeartsCount, bool& laserBought, float& co
     for (int i = 0; i < rootNode.child("hearts").text().as_int(1); ++i) {
         addHeart(hearthRects);
     }
+    ufosCountText.setText(renderer, robotoF, rootNode.child("ufosCount").text().as_int(), {});
+    scorePerSecondText.setText(renderer, robotoF, ufosCountText.text + "/s", {});
+    collectedScoreText.setText(renderer, robotoF, rootNode.child("collectedScore").text().as_int(), {});
+    boughtUfos = rootNode.child("boughtUfos").text().as_bool();
+    hasShield = rootNode.child("hasShield").text().as_bool();
 }
 
 void saveData()
@@ -613,6 +641,14 @@ void saveData()
     cowSpawnDelayNode.append_child(pugi::node_pcdata).set_value(std::to_string(cowSpawnDelay).c_str());
     pugi::xml_node heartsNode = rootNode.append_child("hearts");
     heartsNode.append_child(pugi::node_pcdata).set_value(std::to_string(hearthRects.size()).c_str());
+    pugi::xml_node ufosCountNode = rootNode.append_child("ufosCount");
+    ufosCountNode.append_child(pugi::node_pcdata).set_value(ufosCountText.text.c_str());
+    pugi::xml_node collectedScoreNode = rootNode.append_child("collectedScore");
+    collectedScoreNode.append_child(pugi::node_pcdata).set_value(collectedScoreText.text.c_str());
+    pugi::xml_node boughtUfosNode = rootNode.append_child("boughtUfos");
+    boughtUfosNode.append_child(pugi::node_pcdata).set_value(std::to_string(boughtUfos).c_str());
+    pugi::xml_node hasShieldNode = rootNode.append_child("hasShield");
+    hasShieldNode.append_child(pugi::node_pcdata).set_value(std::to_string(hasShield).c_str());
     doc.save_file((prefPath + "data.xml").c_str());
 #ifdef __EMSCRIPTEN__
     EM_ASM(
@@ -626,6 +662,10 @@ void saveData()
 void mainLoop()
 {
     float deltaTime = globalClock.restart();
+    if (cowsClock.getElapsedTime() > 1) {
+        collectedScoreText.setText(renderer, robotoF, std::stoi(collectedScoreText.text) + std::stoi(ufosCountText.text), {});
+        cowsClock.restart();
+    }
     if (state == State::Gameplay) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -661,6 +701,9 @@ void mainLoop()
                     else {
                         muteMusicAndSounds();
                     }
+                }
+                if (SDL_PointInFRect(&mousePos, &ufosBtnR) && boughtUfos) {
+                    state = State::Ufos;
                 }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
@@ -765,11 +808,16 @@ void mainLoop()
                 if (cows[i].r.y <= 150) {
                     cows.erase(cows.begin() + i--);
                     if (hasLaser) {
-                        hearthRects.pop_back();
-                        if (hearthRects.empty()) {
-                            scoreText.setText(renderer, robotoF, "0", {});
-                            for (int i = 0; i < maxHeartsCount; ++i) {
-                                addHeart(hearthRects);
+                        if (hasShield) {
+                            hasShield = false;
+                        }
+                        else {
+                            hearthRects.pop_back();
+                            if (hearthRects.empty()) {
+                                scoreText.setText(renderer, robotoF, "0", {});
+                                for (int i = 0; i < maxHeartsCount; ++i) {
+                                    addHeart(hearthRects);
+                                }
                             }
                         }
                         Mix_PlayChannel(-1, hitS, 0);
@@ -797,11 +845,16 @@ void mainLoop()
                         Mix_PlayChannel(-1, pickupS, 0);
                     }
                     else {
-                        hearthRects.pop_back();
-                        if (hearthRects.empty()) {
-                            scoreText.setText(renderer, robotoF, "0", {});
-                            for (int i = 0; i < maxHeartsCount; ++i) {
-                                addHeart(hearthRects);
+                        if (hasShield) {
+                            hasShield = false;
+                        }
+                        else {
+                            hearthRects.pop_back();
+                            if (hearthRects.empty()) {
+                                scoreText.setText(renderer, robotoF, "0", {});
+                                for (int i = 0; i < maxHeartsCount; ++i) {
+                                    addHeart(hearthRects);
+                                }
                             }
                         }
                         Mix_PlayChannel(-1, hitS, 0);
@@ -855,6 +908,9 @@ void mainLoop()
             backgroundDstR2.x = backgroundDstR.x + backgroundDstR.w;
         }
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
+        if (hasShield) {
+            SDL_RenderCopyF(renderer, bubbleT, 0, &player.r);
+        }
         if (hasLaser) {
             SDL_RenderCopyF(renderer, ufoWithRedLaserT, 0, &player.r);
         }
@@ -884,6 +940,9 @@ void mainLoop()
         }
         else {
             SDL_RenderCopyF(renderer, mutedT, 0, &soundBtnR);
+        }
+        if (boughtUfos) {
+            SDL_RenderCopyF(renderer, manyUfosT, 0, &ufosBtnR);
         }
         SDL_RenderPresent(renderer);
     }
@@ -940,6 +999,20 @@ void mainLoop()
                         cowSpawnDelay = 1500;
                     }
                 }
+                if (SDL_PointInFRect(&mousePos, &buyShieldBtnR) && !hasShield) {
+                    if (std::stoi(scoreText.text) >= std::stoi(buyShieldPriceText.text)) {
+                        Mix_PlayChannel(-1, powerupS, 0);
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(buyShieldPriceText.text), {});
+                        hasShield = true;
+                    }
+                }
+                if (SDL_PointInFRect(&mousePos, &buyUfosBtnR) && !boughtUfos) {
+                    if (std::stoi(scoreText.text) >= std::stoi(buyUfosPriceText.text)) {
+                        Mix_PlayChannel(-1, powerupS, 0);
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(buyUfosPriceText.text), {});
+                        boughtUfos = true;
+                    }
+                }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
                 buttons[event.button.button] = false;
@@ -970,8 +1043,82 @@ void mainLoop()
             buyMoreCowsPriceText.draw(renderer);
             SDL_RenderCopyF(renderer, buyT, 0, &buyMoreCowsBtnR);
         }
+        if (!hasShield) {
+            SDL_RenderCopyF(renderer, shieldT, 0, &buyShieldR);
+            buyShieldPriceText.draw(renderer);
+            SDL_RenderCopyF(renderer, buyT, 0, &buyShieldBtnR);
+        }
+        if (!boughtUfos) {
+            SDL_RenderCopyF(renderer, manyUfosT, 0, &buyUfosR);
+            buyUfosPriceText.draw(renderer);
+            SDL_RenderCopyF(renderer, buyT, 0, &buyUfosBtnR);
+        }
         SDL_RenderCopyF(renderer, backArrowT, 0, &backArrowR);
         scoreText.draw(renderer);
+        SDL_RenderPresent(renderer);
+    }
+    else if (state == State::Ufos) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                saveData();
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &backArrowR)) {
+                    state = State::Gameplay;
+                }
+                if (SDL_PointInFRect(&mousePos, &addUfoBtnR)) {
+                    if (std::stoi(scoreText.text) >= std::stoi(addUfoPriceText.text)) {
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(addUfoPriceText.text), {});
+                        Mix_PlayChannel(-1, powerupS, 0);
+                        ufosCountText.setText(renderer, robotoF, std::stoi(ufosCountText.text) + 1, {});
+                        scorePerSecondText.setText(renderer, robotoF, ufosCountText.text + "/s", {});
+                    }
+                }
+                if (SDL_PointInFRect(&mousePos, &collectAllBtnR)) {
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + std::stoi(collectedScoreText.text), {});
+                    collectedScoreText.setText(renderer, robotoF, "0", {});
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+        SDL_RenderClear(renderer);
+        scorePerSecondText.draw(renderer);
+        collectedScoreText.draw(renderer);
+        SDL_RenderCopyF(renderer, addT, 0, &addUfoBtnR);
+        addUfoPriceText.draw(renderer);
+        SDL_RenderCopyF(renderer, collectAllT, 0, &collectAllBtnR);
+        SDL_RenderCopyF(renderer, backArrowT, 0, &backArrowR);
+        ufosCountText.draw(renderer);
+        SDL_FRect ufoR;
+        ufoR.w = 32;
+        ufoR.h = 32;
+        ufoR.x = ufosCountText.dstR.x + ufosCountText.dstR.w;
+        ufoR.y = ufosCountText.dstR.y;
+        SDL_RenderCopyF(renderer, ufoT, 0, &ufoR);
         SDL_RenderPresent(renderer);
     }
 }
@@ -1056,6 +1203,12 @@ int main(int argc, char* argv[])
     ufoWithRedLaserT = IMG_LoadTexture(renderer, "res/ufoWithRedLaser.png");
     redLaserT = IMG_LoadTexture(renderer, "res/redLaser.png");
     moreCowsUpgradeT = IMG_LoadTexture(renderer, "res/moreCowsUpgrade.png");
+    manyUfosT = IMG_LoadTexture(renderer, "res/manyUfos.png");
+    addT = IMG_LoadTexture(renderer, "res/plus.png");
+    leftArrowT = IMG_LoadTexture(renderer, "res/leftArrow.png");
+    collectAllT = IMG_LoadTexture(renderer, "res/collectAll.png");
+    shieldT = IMG_LoadTexture(renderer, "res/shield.png");
+    bubbleT = IMG_LoadTexture(renderer, "res/bubble.png");
     music = Mix_LoadMUS("res/music.ogg");
     pickupS = Mix_LoadWAV("res/pickup.wav");
     powerupS = Mix_LoadWAV("res/powerup.wav");
@@ -1117,6 +1270,32 @@ int main(int argc, char* argv[])
     buyMoreCowsBtnR.h = 38;
     buyMoreCowsBtnR.x = buyMoreCowsR.x;
     buyMoreCowsBtnR.y = buyMoreCowsR.y + buyMoreCowsR.h + 5;
+    buyShieldR.w = 64;
+    buyShieldR.h = 64;
+    buyShieldR.x = buyHeartR.x;
+    buyShieldPriceText.setText(renderer, robotoF, "20", {});
+    buyShieldPriceText.dstR.w = 50;
+    buyShieldPriceText.dstR.h = 20;
+    buyShieldPriceText.dstR.x = buyShieldR.x + buyShieldR.w / 2 - buyShieldPriceText.dstR.w / 2;
+    buyShieldPriceText.dstR.y = buyHeartBtnR.y + buyHeartBtnR.h;
+    buyShieldR.y = buyShieldPriceText.dstR.y + buyShieldPriceText.dstR.h + 5;
+    buyShieldBtnR.w = buyShieldR.w;
+    buyShieldBtnR.h = 38;
+    buyShieldBtnR.x = buyShieldR.x;
+    buyShieldBtnR.y = buyShieldR.y + buyShieldR.h + 5;
+    buyUfosR.w = 64;
+    buyUfosR.h = 64;
+    buyUfosR.x = buyLaserR.x;
+    buyUfosPriceText.setText(renderer, robotoF, "50", {});
+    buyUfosPriceText.dstR.w = 50;
+    buyUfosPriceText.dstR.h = 20;
+    buyUfosPriceText.dstR.x = buyUfosR.x + buyUfosR.w / 2 - buyUfosPriceText.dstR.w / 2;
+    buyUfosPriceText.dstR.y = buyHeartBtnR.y + buyHeartBtnR.h;
+    buyUfosR.y = buyUfosPriceText.dstR.y + buyUfosPriceText.dstR.h + 5;
+    buyUfosBtnR.w = buyUfosR.w;
+    buyUfosBtnR.h = 38;
+    buyUfosBtnR.x = buyUfosR.x;
+    buyUfosBtnR.y = buyUfosR.y + buyUfosR.h + 5;
     backgroundDstR.w = windowWidth;
     backgroundDstR.h = windowHeight;
     backgroundDstR.x = 0;
@@ -1133,10 +1312,40 @@ int main(int argc, char* argv[])
     soundBtnR.h = 32;
     soundBtnR.x = windowWidth - soundBtnR.w;
     soundBtnR.y = shopR.y + shopR.h;
+    ufosBtnR.w = 48;
+    ufosBtnR.h = 48;
+    ufosBtnR.x = windowWidth - ufosBtnR.w;
+    ufosBtnR.y = soundBtnR.y + soundBtnR.h;
+    scorePerSecondText.dstR.w = 100;
+    scorePerSecondText.dstR.h = 30;
+    scorePerSecondText.dstR.x = windowWidth / 2 - scorePerSecondText.dstR.w / 2;
+    scorePerSecondText.dstR.y = 5;
+    collectedScoreText.dstR.w = 50;
+    collectedScoreText.dstR.h = 30;
+    collectedScoreText.dstR.x = windowWidth / 2 - collectedScoreText.dstR.w / 2;
+    collectedScoreText.dstR.y = scorePerSecondText.dstR.y + scorePerSecondText.dstR.h + 5;
+    addUfoBtnR.w = 32;
+    addUfoBtnR.h = 32;
+    addUfoBtnR.x = 30;
+    addUfoBtnR.y = collectedScoreText.dstR.y + collectedScoreText.dstR.h / 2 - addUfoBtnR.h / 2;
+    addUfoPriceText.setText(renderer, robotoF, "50", {});
+    addUfoPriceText.dstR.w = 100;
+    addUfoPriceText.dstR.h = 30;
+    addUfoPriceText.dstR.x = addUfoBtnR.x + addUfoBtnR.w / 2 - addUfoPriceText.dstR.w / 2;
+    addUfoPriceText.dstR.y = addUfoBtnR.y + addUfoBtnR.h + 3;
+    collectAllBtnR.w = 100;
+    collectAllBtnR.h = 60;
+    collectAllBtnR.x = windowWidth - collectAllBtnR.w;
+    collectAllBtnR.y = collectedScoreText.dstR.y + collectedScoreText.dstR.h / 2;
+    ufosCountText.dstR.w = 50;
+    ufosCountText.dstR.h = 20;
+    ufosCountText.dstR.x = windowWidth / 2 - ufosCountText.dstR.w / 2;
+    ufosCountText.dstR.y = collectAllBtnR.y + collectAllBtnR.h;
     globalClock.restart();
     cowClock.restart();
     enemyClock.restart();
     heartClock.restart();
+    cowsClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else
