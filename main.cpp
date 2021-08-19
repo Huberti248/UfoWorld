@@ -75,6 +75,7 @@ bool running = true;
 #define DEFAULT_COW_SPAWN_DELAY 3000
 #define DEFAULT_MAX_HEARTS 1
 #define MIN_HEARTS_COUNT 1
+#define FLYING_ENEMY_LAST_FRAME_PLUS_ONE 8
 
 void logOutputCallback(void* userdata, int category, SDL_LogPriority priority, const char* message)
 {
@@ -478,10 +479,17 @@ struct Entity {
     int dx = 0;
 };
 
+enum class EnemyType {
+    Landing,
+    Flying,
+};
+
 struct Collectable {
     SDL_FRect r{};
     bool isLeft = false;
     int turns = 0;
+    EnemyType enemyType = EnemyType::Landing;
+    int currTexture = 0;
 };
 
 enum class State {
@@ -501,6 +509,7 @@ SDL_Texture* backgroundT;
 SDL_Texture* mutedT;
 SDL_Texture* unmutedT;
 SDL_Texture* alienT;
+std::vector<SDL_Texture*> flyingEnemyTextures;
 SDL_Texture* ufoWithRedLaserT;
 SDL_Texture* redLaserT;
 SDL_Texture* moreCowsUpgradeT;
@@ -574,14 +583,15 @@ Text otherText;
 
 Collectable generateCollectable(Entity player)
 {
-    Collectable cow;
+    Collectable collectable;
     do {
-        cow.r.w = 32;
-        cow.r.h = 32;
-        cow.r.x = random(0, 1) ? -cow.r.w : windowWidth;
-        cow.r.y = windowHeight - cow.r.h;
-    } while (SDL_HasIntersectionF(&cow.r, &player.r));
-    return cow;
+        collectable.r.w = 32;
+        collectable.r.h = 32;
+        collectable.r.x = random(0, 1) ? -collectable.r.w : windowWidth;
+        collectable.r.y = windowHeight - collectable.r.h;
+    } while (SDL_HasIntersectionF(&collectable.r, &player.r));
+    collectable.enemyType = (EnemyType)random(0, 1);
+    return collectable;
 }
 
 void muteMusicAndSounds()
@@ -1103,7 +1113,16 @@ void mainLoop()
             }
         }
         for (int i = 0; i < enemies.size(); ++i) {
-            SDL_RenderCopyExF(renderer, alienT, 0, &enemies[i].r, 0, 0, SDL_FLIP_NONE);
+            if (enemies[i].enemyType == EnemyType::Landing) {
+                SDL_RenderCopyExF(renderer, alienT, 0, &enemies[i].r, 0, 0, SDL_FLIP_NONE);
+            }
+            else if (enemies[i].enemyType == EnemyType::Flying) {
+                SDL_RenderCopyExF(renderer, flyingEnemyTextures[enemies[i].currTexture], 0, &enemies[i].r, 0, 0, SDL_FLIP_NONE);
+                ++enemies[i].currTexture;
+                if (enemies[i].currTexture == FLYING_ENEMY_LAST_FRAME_PLUS_ONE) {
+                    enemies[i].currTexture = 0;
+                }
+            }
         }
         scoreText.draw(renderer);
         for (int i = 0; i < hearthRects.size(); ++i) {
@@ -1389,6 +1408,9 @@ int main(int argc, char* argv[])
     collectAllT = IMG_LoadTexture(renderer, "res/collectAll.png");
     shieldT = IMG_LoadTexture(renderer, "res/shield.png");
     bubbleT = IMG_LoadTexture(renderer, "res/bubble.png");
+    for (int i = 1; i < 9; ++i) {
+        flyingEnemyTextures.push_back(IMG_LoadTexture(renderer, ("res/FlyingMonster/png/frame-" + std::to_string(i) + ".png").c_str()));
+    }
     music = Mix_LoadMUS("res/music.ogg");
     pickupS = Mix_LoadWAV("res/pickup.wav");
     powerupS = Mix_LoadWAV("res/powerup.wav");
