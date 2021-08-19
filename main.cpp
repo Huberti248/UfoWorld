@@ -71,7 +71,10 @@ TTF_Font* robotoF;
 bool running = true;
 
 #define COW_TRAVEL_DISTANCE 10
+#define MAX_TRAVEL_DISTANCE 100
 #define DEFAULT_COW_SPAWN_DELAY 3000
+#define DEFAULT_MAX_HEARTS 1
+#define MIN_HEARTS_COUNT 1
 
 void logOutputCallback(void* userdata, int category, SDL_LogPriority priority, const char* message)
 {
@@ -478,12 +481,14 @@ struct Entity {
 struct Collectable {
     SDL_FRect r{};
     bool isLeft = false;
+    int turns = 0;
 };
 
 enum class State {
     Gameplay,
     Shop,
     Ufos,
+    Credits,
 };
 
 SDL_Texture* ufoT;
@@ -557,6 +562,15 @@ SDL_FRect collectAllBtnR;
 Text ufosCountText;
 bool hasShield = false;
 bool boughtUfos = false;
+Text fooText;
+Text creditsText;
+std::vector<Text> credits;
+Text creditsInfoText;
+Text authorText;
+Text authorValueText;
+Text graphicsText;
+Text graphicsValueText;
+Text otherText;
 
 Collectable generateCollectable(Entity player)
 {
@@ -610,14 +624,113 @@ void addHeart(std::vector<SDL_FRect>& hearthRects)
 
 void readData(Text& scoreText, int& maxHeartsCount, bool& laserBought, float& cowSpawnDelay)
 {
+#ifdef __EMSCRIPTEN__
+    scoreText.setText(renderer, robotoF,
+        EM_ASM_INT({
+            var s = localStorage.getItem("score");
+            if (s) {
+                return s;
+            }
+            else {
+                return $0;
+            }
+        },
+            0),
+        {});
+    maxHeartsCount = EM_ASM_INT({
+        var s = localStorage.getItem("maxHearts");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        DEFAULT_MAX_HEARTS);
+    laserBought = EM_ASM_INT({
+        var s = localStorage.getItem("laserBought");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    });
+    cowSpawnDelay = EM_ASM_INT({
+        var s = localStorage.getItem("cowSpawnDelay");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        DEFAULT_COW_SPAWN_DELAY);
+    int hearts = EM_ASM_INT({
+        var s = localStorage.getItem("hearts");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        MIN_HEARTS_COUNT);
+    for (int i = 0; i < hearts; ++i) {
+        addHeart(hearthRects);
+    }
+    int ufosCount = EM_ASM_INT({
+        var s = localStorage.getItem("ufosCount");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        0);
+    ufosCountText.setText(renderer, robotoF, ufosCount, {});
+    scorePerSecondText.setText(renderer, robotoF, std::to_string(ufosCount) + "/s", {});
+    collectedScoreText.setText(renderer, robotoF, EM_ASM_INT({
+        var s = localStorage.getItem("collectedScore");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+                                                      0),
+        {});
+    boughtUfos = EM_ASM_INT({
+        var s = localStorage.getItem("boughtUfos");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        0);
+    hasShield = EM_ASM_INT({
+        var s = localStorage.getItem("hasShield");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        0);
+#else
     pugi::xml_document doc;
     doc.load_file((prefPath + "data.xml").c_str());
     pugi::xml_node rootNode = doc.child("root");
-    scoreText.setText(renderer, robotoF, rootNode.child("score").text().as_string("1"), {});
-    maxHeartsCount = rootNode.child("maxHearts").text().as_int(1);
+    scoreText.setText(renderer, robotoF, rootNode.child("score").text().as_string("0"), {});
+    maxHeartsCount = rootNode.child("maxHearts").text().as_int(DEFAULT_MAX_HEARTS);
     laserBought = rootNode.child("laserBought").text().as_bool();
     cowSpawnDelay = rootNode.child("cowSpawnDelay").text().as_float(DEFAULT_COW_SPAWN_DELAY);
-    for (int i = 0; i < rootNode.child("hearts").text().as_int(1); ++i) {
+    for (int i = 0; i < rootNode.child("hearts").text().as_int(MIN_HEARTS_COUNT); ++i) {
         addHeart(hearthRects);
     }
     ufosCountText.setText(renderer, robotoF, rootNode.child("ufosCount").text().as_int(), {});
@@ -625,10 +738,49 @@ void readData(Text& scoreText, int& maxHeartsCount, bool& laserBought, float& co
     collectedScoreText.setText(renderer, robotoF, rootNode.child("collectedScore").text().as_int(), {});
     boughtUfos = rootNode.child("boughtUfos").text().as_bool();
     hasShield = rootNode.child("hasShield").text().as_bool();
+#endif
 }
 
 void saveData()
 {
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        localStorage.setItem("score", $0);
+    },
+        std::stoi(scoreText.text));
+    EM_ASM({
+        localStorage.setItem("maxHearts", $0);
+    },
+        maxHeartsCount);
+    EM_ASM({
+        localStorage.setItem("laserBought", $0);
+    },
+        laserBought);
+    EM_ASM({
+        localStorage.setItem("cowSpawnDelay", $0);
+    },
+        cowSpawnDelay);
+    EM_ASM({
+        localStorage.setItem("hearts", $0);
+    },
+        hearthRects.size());
+    EM_ASM({
+        localStorage.setItem("ufosCount", $0);
+    },
+        std::stoi(ufosCountText.text));
+    EM_ASM({
+        localStorage.setItem("collectedScore", $0);
+    },
+        std::stoi(collectedScoreText.text));
+    EM_ASM({
+        localStorage.setItem("boughtUfos", $0);
+    },
+        boughtUfos);
+    EM_ASM({
+        localStorage.setItem("hasShield", $0);
+    },
+        hasShield);
+#else
     pugi::xml_document doc;
     pugi::xml_node rootNode = doc.append_child("root");
     pugi::xml_node scoreNode = rootNode.append_child("score");
@@ -650,19 +802,13 @@ void saveData()
     pugi::xml_node hasShieldNode = rootNode.append_child("hasShield");
     hasShieldNode.append_child(pugi::node_pcdata).set_value(std::to_string(hasShield).c_str());
     doc.save_file((prefPath + "data.xml").c_str());
-#ifdef __EMSCRIPTEN__
-    EM_ASM(
-        console.log('saveing...');
-        FS.syncfs(function(err) {
-            console.log('syncfs error');
-        }););
 #endif
 }
 
 void mainLoop()
 {
     float deltaTime = globalClock.restart();
-    if (cowsClock.getElapsedTime() > 1) {
+    if (cowsClock.getElapsedTime() > 1000) {
         collectedScoreText.setText(renderer, robotoF, std::stoi(collectedScoreText.text) + std::stoi(ufosCountText.text), {});
         cowsClock.restart();
     }
@@ -705,6 +851,9 @@ void mainLoop()
                 if (SDL_PointInFRect(&mousePos, &ufosBtnR) && boughtUfos) {
                     state = State::Ufos;
                 }
+                if (SDL_PointInFRect(&mousePos, &creditsText.dstR)) {
+                    state = State::Credits;
+                }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
                 buttons[event.button.button] = false;
@@ -732,32 +881,59 @@ void mainLoop()
             cows[i].r.x += -player.dx * deltaTime * GAME_SPEED;
             if (player.dx == 0) {
 #if 0
-                cows[i].dstX = random(cows[i].r.x - 10, cows[i].r.x + 10);
-                if (cows[i].dstX - cows[i].r.x > 0) {
-                    cows[i].isLeft = false;
-                }
-                else if (cows[i].dstX - cows[i].r.x < 0) {
-                    cows[i].isLeft = true;
-                }
-                cows[i].r.x = lerp(cows[i].r.x, cows[i].dstX, deltaTime * GAME_SPEED);
-
-                if (cows[i].r.x == cows[i].dstX && cows[i].walkState != WalkState::Waiting) {
-                    if (random(0, 1)) {
-                        cows[i].walkState = WalkState::Moving;
+                if (cows[i].walkState == WalkState::Waiting) {
+                    if (cows[i].waitClock.getElapsedTime() > 3000) {
+                        if (random(0, 1)) {
+                            cows[i].walkState = WalkState::Moving;
+                            cows[i].dstX = random(cows[i].r.x - MAX_TRAVEL_DISTANCE, cows[i].r.x + MAX_TRAVEL_DISTANCE);
+                        }
+                        else {
+                            cows[i].walkState = WalkState::Waiting;
+                            cows[i].waitClock.restart();
+                        }
                     }
-                    else {
-                        cows[i].walkState = WalkState::Waiting;
+                }
+                else {
+                    if (cows[i].dstX - cows[i].r.x > 0) {
+                        cows[i].isLeft = false;
+                    }
+                    else if (cows[i].dstX - cows[i].r.x < 0) {
+                        cows[i].isLeft = true;
+                    }
+                    cows[i].r.x = lerp(cows[i].r.x, cows[i].dstX, deltaTime * GAME_SPEED);
+
+                    if (cows[i].r.x == cows[i].dstX) {
+                        if (random(0, 1)) {
+                            cows[i].walkState = WalkState::Moving;
+                            cows[i].dstX = random(cows[i].r.x - MAX_TRAVEL_DISTANCE, cows[i].r.x + MAX_TRAVEL_DISTANCE);
+                        }
+                        else {
+                            cows[i].walkState = WalkState::Waiting;
+                            cows[i].waitClock.restart();
+                        }
                     }
                 }
 #endif
 #if 1
-                if (random(0, 1)) {
-                    cows[i].r.x += deltaTime * GAME_SPEED;
-                    cows[i].isLeft = false;
+                if (cows[i].turns > 0) {
+                    --cows[i].turns;
+                    if (cows[i].isLeft) {
+                        cows[i].r.x += -deltaTime * GAME_SPEED;
+                    }
+                    else {
+                        cows[i].r.x += deltaTime * GAME_SPEED;
+                    }
                 }
                 else {
-                    cows[i].r.x += -deltaTime * GAME_SPEED;
-                    cows[i].isLeft = true;
+                    if (random(0, 1)) {
+                        cows[i].r.x += deltaTime * GAME_SPEED;
+                        cows[i].isLeft = false;
+                    }
+                    else {
+                        cows[i].r.x += -deltaTime * GAME_SPEED;
+                        cows[i].isLeft = true;
+                    }
+                    cows[i].turns = 5;
                 }
 #endif
             }
@@ -886,6 +1062,7 @@ void mainLoop()
         }
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
         SDL_RenderClear(renderer);
+        SDL_RenderCopyF(renderer, backgroundT, 0, 0);
         SDL_RenderCopyF(renderer, backgroundT, 0, &backgroundDstR);
         SDL_RenderCopyExF(renderer, backgroundT, 0, &backgroundDstR2, 0, 0, SDL_FLIP_HORIZONTAL);
         SDL_RenderCopyExF(renderer, backgroundT, 0, &backgroundDstR3, 0, 0, SDL_FLIP_HORIZONTAL);
@@ -944,6 +1121,8 @@ void mainLoop()
         if (boughtUfos) {
             SDL_RenderCopyF(renderer, manyUfosT, 0, &ufosBtnR);
         }
+        fooText.draw(renderer);
+        creditsText.draw(renderer);
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1121,6 +1300,56 @@ void mainLoop()
         SDL_RenderCopyF(renderer, ufoT, 0, &ufoR);
         SDL_RenderPresent(renderer);
     }
+    else if (state == State::Credits) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                saveData();
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &backArrowR)) {
+                    state = State::Gameplay;
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+        SDL_RenderClear(renderer);
+        for (int i = 0; i < credits.size(); ++i) {
+            credits[i].draw(renderer);
+        }
+        SDL_RenderCopyF(renderer, backArrowT, 0, &backArrowR);
+        creditsInfoText.draw(renderer);
+        authorText.draw(renderer);
+        authorValueText.draw(renderer);
+        graphicsText.draw(renderer);
+        graphicsValueText.draw(renderer);
+        otherText.draw(renderer);
+        SDL_RenderPresent(renderer);
+    }
+    saveData();
 }
 
 int main(int argc, char* argv[])
@@ -1139,56 +1368,7 @@ int main(int argc, char* argv[])
     SDL_GetWindowSize(window, &w, &h);
     SDL_RenderSetScale(renderer, w / (float)windowWidth, h / (float)windowHeight);
     SDL_AddEventWatch(eventWatch, 0);
-#ifdef __EMSCRIPTEN__
-    EM_ASM_({
-        FS.mkdir('/offline');
-        FS.mount(IDBFS, {}, '/offline');
-        FS.syncfs(
-            true, function(err) {
-                console.log('syncfs error ' + err);
-            });
-        //var data = new Uint8Array(32);
-        //data[0] = 2;
-        //var stream = FS.open("/offline/data.txt", "w");
-        //FS.write(stream, data, 0, data.length, 0);
-        //FS.close(stream);
-        var buf = new Uint8Array(32);
-        var stream = FS.open("/offline/data.txt", "r");
-        FS.read(stream, buf, 0, 32, 0);
-        FS.close(stream);
-        console.log(buf);
-    });
-
-    //    EM_ASM(
-    //        FS.mkdir('/working1');
-    //        FS.mount(IDBFS, {}, '/working1');
-    //
-    //#if !FIRST
-    //        // syncfs(true, f) should not break on already-existing directories:
-    //        FS.mkdir('/working1/dir');
-    //#endif
-    //
-    //        // sync from persisted state into memory and then
-    //        // run the 'test' function
-    //        FS.syncfs(
-    //            true, function(err) {
-    //                assert(!err);
-    //                ccall('test', 'v');
-    //            }););
-
-    // TODO: Why below instruction causes black screen
-    //EM_ASM(
-    //    FS.mkdir('/offline');
-    //    FS.mount(IDBFS, {}, '/offline');
-    //    FS.syncfs(true, function(err){
-    //                        // Error
-    //                    }););
-#endif
-#ifdef __EMSCRIPTEN__
-    prefPath = "/offline/";
-#else
     prefPath = SDL_GetPrefPath("NextCodeApps", "UfoWorld");
-#endif
     readData(scoreText, maxHeartsCount, laserBought, cowSpawnDelay);
     cowT = IMG_LoadTexture(renderer, "res/cow.png");
     ufoT = IMG_LoadTexture(renderer, "res/ufo.png");
@@ -1312,10 +1492,6 @@ int main(int argc, char* argv[])
     soundBtnR.h = 32;
     soundBtnR.x = windowWidth - soundBtnR.w;
     soundBtnR.y = shopR.y + shopR.h;
-    ufosBtnR.w = 48;
-    ufosBtnR.h = 48;
-    ufosBtnR.x = windowWidth - ufosBtnR.w;
-    ufosBtnR.y = soundBtnR.y + soundBtnR.h;
     scorePerSecondText.dstR.w = 100;
     scorePerSecondText.dstR.h = 30;
     scorePerSecondText.dstR.x = windowWidth / 2 - scorePerSecondText.dstR.w / 2;
@@ -1341,6 +1517,75 @@ int main(int argc, char* argv[])
     ufosCountText.dstR.h = 20;
     ufosCountText.dstR.x = windowWidth / 2 - ufosCountText.dstR.w / 2;
     ufosCountText.dstR.y = collectAllBtnR.y + collectAllBtnR.h;
+    creditsText.setText(renderer, robotoF, "C", {});
+    creditsText.dstR.w = 50;
+    creditsText.dstR.h = 40;
+    creditsText.dstR.x = windowWidth - creditsText.dstR.w;
+    creditsText.dstR.y = soundBtnR.y + soundBtnR.h;
+    ufosBtnR.w = 48;
+    ufosBtnR.h = 48;
+    ufosBtnR.x = windowWidth - ufosBtnR.w;
+    ufosBtnR.y = creditsText.dstR.y + creditsText.dstR.h;
+    creditsInfoText.dstR.w = 100;
+    creditsInfoText.dstR.h = 20;
+    creditsInfoText.dstR.x = windowWidth / 2 - creditsInfoText.dstR.w / 2;
+    creditsInfoText.dstR.y = 0;
+    authorText.setText(renderer, robotoF, "Author:", {});
+    authorText.dstR.w = 100;
+    authorText.dstR.h = 20;
+    authorText.dstR.x = 0;
+    authorText.dstR.y = backArrowR.y + backArrowR.h;
+    authorValueText.setText(renderer, robotoF, "Huberti", {});
+    authorValueText.dstR.w = 100;
+    authorValueText.dstR.h = 20;
+    authorValueText.dstR.x = 0;
+    authorValueText.dstR.y = authorText.dstR.y + authorText.dstR.h;
+    graphicsText.setText(renderer, robotoF, "Graphics:", {});
+    graphicsText.dstR.w = 100;
+    graphicsText.dstR.h = 20;
+    graphicsText.dstR.x = 0;
+    graphicsText.dstR.y = authorValueText.dstR.y + authorValueText.dstR.h;
+    graphicsValueText.setText(renderer, robotoF, "MalgorzataMika", {});
+    graphicsValueText.dstR.w = 100;
+    graphicsValueText.dstR.h = 20;
+    graphicsValueText.dstR.x = 0;
+    graphicsValueText.dstR.y = graphicsText.dstR.y + graphicsText.dstR.h;
+    otherText.setText(renderer, robotoF, "Other:", {});
+    otherText.dstR.w = 100;
+    otherText.dstR.h = 20;
+    otherText.dstR.x = 0;
+    otherText.dstR.y = graphicsValueText.dstR.y + graphicsValueText.dstR.h;
+    credits.push_back(Text());
+    credits.back().setText(renderer, robotoF, "Lima Studio", {});
+    credits.back().dstR.w = 100;
+    credits.back().dstR.h = 20;
+    credits.back().dstR.x = 0;
+    credits.back().dstR.y = otherText.dstR.y + otherText.dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "Freepik", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "Nikita Golubev", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "Becris", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "surang", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "StubbornParakeet", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "Pixel perfect", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "Vectors Market", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    credits.push_back(credits.back());
+    credits.back().setText(renderer, robotoF, "Roundicons", {});
+    credits.back().dstR.y += credits.back().dstR.h;
+    creditsInfoText.setText(renderer, robotoF, "Credits", {});
     globalClock.restart();
     cowClock.restart();
     enemyClock.restart();
