@@ -519,6 +519,9 @@ SDL_Texture* leftArrowT;
 SDL_Texture* collectAllT;
 SDL_Texture* shieldT;
 SDL_Texture* bubbleT;
+SDL_Texture* goLeftT;
+SDL_Texture* goRightT;
+SDL_Texture* yellowLaserT;
 Mix_Music* music;
 Mix_Chunk* pickupS;
 Mix_Chunk* powerupS;
@@ -580,6 +583,9 @@ Text authorValueText;
 Text graphicsText;
 Text graphicsValueText;
 Text otherText;
+SDL_FRect goLeftR;
+SDL_FRect goRightR;
+SDL_FRect laserBtnR;
 
 Collectable generateCollectable(Entity player)
 {
@@ -823,6 +829,7 @@ void mainLoop()
         cowsClock.restart();
     }
     if (state == State::Gameplay) {
+        player.dx = 0;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -864,6 +871,13 @@ void mainLoop()
                 if (SDL_PointInFRect(&mousePos, &creditsText.dstR)) {
                     state = State::Credits;
                 }
+#ifdef __ANDROID__
+                if (SDL_PointInFRect(&mousePos, &laserBtnR)) {
+                    if (laserBought) {
+                        hasLaser = !hasLaser;
+                    }
+                }
+#endif
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
                 buttons[event.button.button] = false;
@@ -877,7 +891,16 @@ void mainLoop()
                 realMousePos.y = event.motion.y;
             }
         }
-        player.dx = 0;
+#ifdef __ANDROID__
+        if (buttons[SDL_BUTTON_LEFT]) {
+            if (SDL_PointInFRect(&mousePos, &goLeftR)) {
+                player.dx = -1;
+            }
+            if (SDL_PointInFRect(&mousePos, &goRightR)) {
+                player.dx = 1;
+            }
+        }
+#endif
         if (keys[SDL_SCANCODE_A]) {
             player.dx = -1;
         }
@@ -1142,6 +1165,18 @@ void mainLoop()
         }
         fooText.draw(renderer);
         creditsText.draw(renderer);
+#ifdef __ANDROID__
+        SDL_RenderCopyF(renderer, goLeftT, 0, &goLeftR);
+        SDL_RenderCopyF(renderer, goRightT, 0, &goRightR);
+        if (laserBought) {
+            if (hasLaser) {
+                SDL_RenderCopyF(renderer, yellowLaserT, 0, &laserBtnR);
+            }
+            else {
+                SDL_RenderCopyF(renderer, redLaserT, 0, &laserBtnR);
+            }
+        }
+#endif
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1411,6 +1446,9 @@ int main(int argc, char* argv[])
     for (int i = 1; i < 9; ++i) {
         flyingEnemyTextures.push_back(IMG_LoadTexture(renderer, ("res/FlyingMonster/png/frame-" + std::to_string(i) + ".png").c_str()));
     }
+    goLeftT = IMG_LoadTexture(renderer, "res/goLeft.png");
+    goRightT = IMG_LoadTexture(renderer, "res/goRight.png");
+    yellowLaserT = IMG_LoadTexture(renderer, "res/yellowLaser.png");
     music = Mix_LoadMUS("res/music.ogg");
     pickupS = Mix_LoadWAV("res/pickup.wav");
     powerupS = Mix_LoadWAV("res/powerup.wav");
@@ -1608,6 +1646,16 @@ int main(int argc, char* argv[])
     credits.back().setText(renderer, robotoF, "Roundicons", {});
     credits.back().dstR.y += credits.back().dstR.h;
     creditsInfoText.setText(renderer, robotoF, "Credits", {});
+    goLeftR.w = 40;
+    goLeftR.h = 40;
+    goLeftR.x = windowWidth - goLeftR.w * 3;
+    goLeftR.y = windowHeight - 50;
+    goRightR = goLeftR;
+    goRightR.x = windowWidth - goRightR.w;
+    laserBtnR.w = 32;
+    laserBtnR.h = 32;
+    laserBtnR.x = windowWidth - laserBtnR.w;
+    laserBtnR.y = ufosBtnR.y + ufosBtnR.h;
     globalClock.restart();
     cowClock.restart();
     enemyClock.restart();
