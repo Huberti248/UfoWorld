@@ -526,6 +526,7 @@ Mix_Music* music;
 Mix_Chunk* pickupS;
 Mix_Chunk* powerupS;
 Mix_Chunk* hitS;
+Mix_Chunk* laserSwitchS;
 Entity player;
 Clock globalClock;
 std::vector<Collectable> cows;
@@ -845,6 +846,7 @@ void mainLoop()
                 if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
                     if (laserBought) {
                         hasLaser = !hasLaser;
+                        Mix_PlayChannel(-1, laserSwitchS, 0);
                     }
                 }
             }
@@ -875,6 +877,7 @@ void mainLoop()
                 if (SDL_PointInFRect(&mousePos, &laserBtnR)) {
                     if (laserBought) {
                         hasLaser = !hasLaser;
+                        Mix_PlayChannel(-1, laserSwitchS, 0);
                     }
                 }
 #endif
@@ -1453,6 +1456,7 @@ int main(int argc, char* argv[])
     pickupS = Mix_LoadWAV("res/pickup.wav");
     powerupS = Mix_LoadWAV("res/powerup.wav");
     hitS = Mix_LoadWAV("res/hit.wav");
+    laserSwitchS = Mix_LoadWAV("res/laserSwitch.wav");
     Mix_PlayMusic(music, -1);
     cows.push_back(generateCollectable(player));
     scoreText.dstR.w = 20;
